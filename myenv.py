@@ -91,24 +91,58 @@ class DQN:
         self.count += 1   
 
 
-# class myenv:
-#     def __init__(self):
-#         self.action_dim=1
-#         self.state_dim=2
-#         self.standard_value=0
-#         self.present_value=0
+class myenv:
+    def __init__(self):
+        self.action_dim=3 #离散动作的个数
+        self.state_dim=2
+        self.standard_value=0
+        self.present_value=0
+        self.stepnum=0
 
-#     def step(self,action):
-#         if action==0:
-#             self.present_value-=0.1
-#         elif action==1:
+    def step(self,action):
+        self.stepnum+=1
 
-
-
+        if action==0:
+            next_value=self.present_value-0.1
+        elif action==1:
+            next_value=self.present_value
+        elif action==2:
+            next_value=self.present_value+0.1
 
         
 
-lr = 2e-3
+        previous_value=np.abs(self.present_value-self.standard_value)
+        now_value=np.abs(next_value-self.standard_value)
+        if next_value==self.standard_value:
+            reward=100
+        elif now_value>=previous_value:
+            reward=-2
+        elif now_value<previous_value:
+            reward=1
+
+        self.present_value=next_value
+        state=np.array([self.standard_value,next_value])
+
+        if self.stepnum>200 or now_value>3:
+            done=True
+        else:
+            done=False
+
+        info={}
+        return state,reward,done,info
+
+    def reset(self):
+        self.standard_value=np.around(np.random.rand()*5,1)
+        if np.random.rand()>0.5:
+            self.present_value=self.standard_value-2
+        else:
+            self.present_value=self.standard_value+2
+
+        self.stepnum=0
+        state=np.array([self.standard_value,self.present_value])
+        return state
+    
+lr = 1e-3
 num_episodes = 500
 hidden_dim = 128
 gamma = 0.98
@@ -120,20 +154,19 @@ batch_size = 64
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device(
     "cpu")
 
-env_name = 'CartPole-v1'
-env = gym.make(env_name)
+# env_name = 'CartPole-v1'
+env = myenv()
+
 random.seed(0)
 np.random.seed(0)
 # env.seed(0)
 torch.manual_seed(0)
 
 replay_buffer = ReplayBuffer(buffer_size)
-
-state_dim = env.observation_space.shape[0]
-action_dim = env.action_space.n
+state_dim = env.state_dim
+action_dim = env.action_dim
 agent = DQN(state_dim, hidden_dim, action_dim, lr, gamma, epsilon,
             target_update, device)
-
 
 
 return_list = []
@@ -141,11 +174,11 @@ for i in range(10):
     with tqdm(total=int(num_episodes / 10), desc='Iteration %d' % i) as pbar:
         for i_episode in range(int(num_episodes / 10)):
             episode_return = 0
-            state = env.reset()[0]
+            state = env.reset()
             done = False
             while not done:
                 action = agent.take_action(state)
-                next_state, reward, done, _ ,_= env.step(action)
+                next_state, reward, done, _ = env.step(action)
                 replay_buffer.add(state, action, reward, next_state, done)
                 state = next_state
                 episode_return += reward
